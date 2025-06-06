@@ -1,4 +1,4 @@
-namespace Tests
+namespace com.shineglow.di.Tests.Runtime
 {
     public interface IFoo1{}
 

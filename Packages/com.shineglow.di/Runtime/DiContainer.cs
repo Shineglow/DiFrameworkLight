@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace DiFramework.Runtime
+namespace com.shineglow.di.Runtime
 {
     public class DiContainer
     {
