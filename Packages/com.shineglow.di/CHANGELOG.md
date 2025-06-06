@@ -1,3 +1,7 @@
+## [0.2.1] - 2025-06-06
+### Update
+- Assembly definitions have been renamed.
+
 ## [0.2.0] - 2025-06-06
 ### Removed
 - The files in the Assets folder have been deleted.
