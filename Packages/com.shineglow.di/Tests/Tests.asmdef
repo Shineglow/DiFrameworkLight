@@ -6,5 +6,5 @@
     "includePlatforms": [
         "Editor"
     ],
-    "references":[ "GUID:41f935ba3645b78448df0ce00b314877" ]
+    "references":[ "GUID:41f935ba3645b78448df0ce00b314877", "GUID:f623c67313b63174497eac7c87bfbf8c" ]
 }

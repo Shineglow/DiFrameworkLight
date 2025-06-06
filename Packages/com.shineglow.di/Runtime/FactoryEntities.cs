@@ -1,6 +1,6 @@
 using System;
 
-namespace DiFramework.Runtime
+namespace com.shineglow.di.Runtime
 {
     public interface IFactory<T> : IFactory where T : IFactoryItem
     {

@@ -1,0 +1,1 @@
+Install via git: https://github.com/Shineglow/DiFrameworkLight.git?path=Packages/com.shineglow.di#main
