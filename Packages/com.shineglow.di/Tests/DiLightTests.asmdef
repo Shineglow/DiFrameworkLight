@@ -1,0 +1,25 @@
+{
+    "name": "DiTests",
+    "rootNamespace": "",
+    "references": [
+        "GUID:41f935ba3645b78448df0ce00b314877",
+        "GUID:f623c67313b63174497eac7c87bfbf8c",
+        "GUID:27619889b8ba8c24980f49ee34dbb44a",
+        "GUID:0acc523941302664db1f4e527237feb3"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
