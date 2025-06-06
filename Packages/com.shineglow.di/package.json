@@ -1,6 +1,6 @@
 {
   "name": "com.shineglow.di",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "displayName": "DI Light",
   "description": "Lightweight DI framework with minimalistic functionality. Supports:\n  1) binding to derived types and self\n  2) factory registration\n  3) instance caching",
   "unity": "2022.3",
