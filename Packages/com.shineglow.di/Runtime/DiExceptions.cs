@@ -13,4 +13,10 @@ namespace com.shineglow.di.Runtime
         public MultipleBindingsException(){}
         public MultipleBindingsException(string text) : base(text){}
     }
+
+    public class GeneratedMembersAccessException : Exception
+    {
+        public GeneratedMembersAccessException(){}
+        public GeneratedMembersAccessException(string text) : base(text){}
+    }
 }

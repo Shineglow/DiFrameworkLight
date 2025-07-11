@@ -68,8 +68,9 @@ namespace com.shineglow.di.Tests.Runtime
         {
             DiContainer container = new DiContainer();
             container.Bind<IFoo1>().To<Foo1_1>();
-        
-            Assert.Catch<MultipleBindingsException>(() => container.Bind<IFoo1>().To<Foo1_5>());
+            container.Bind<IFoo1>().To<Foo1_5>();
+            // with InjectAttribute checking for multiple bindings moved to EndBinding method that called in Resolve and Bind methods
+            Assert.Catch<MultipleBindingsException>(() => container.Resolve<IFoo1>());
         }
     
         [Test]
@@ -101,6 +102,18 @@ namespace com.shineglow.di.Tests.Runtime
             IFoo1 resolved2 = container.Resolve<IFoo1>();
         
             Assert.IsTrue(ReferenceEquals(resolved1, resolved2));
+        }
+        
+        [Test]
+        public void DiContainer_ResolveWithId_ResolveWillBeCompletedWithoutExceptions()
+        {
+            DiContainer container = new DiContainer();
+            container.Bind<IFoo1>().To<Foo1_1>().WithId("1").IsCachingInstance();
+            container.Bind<IFoo1>().To<Foo1_1>().WithId("2").IsCachingInstance();
+            IFoo1 resolved1 = container.Resolve<IFoo1>("1");
+            IFoo1 resolved2 = container.Resolve<IFoo1>("2");
+        
+            Assert.IsTrue(!ReferenceEquals(resolved1, resolved2));
         }
     }
 }

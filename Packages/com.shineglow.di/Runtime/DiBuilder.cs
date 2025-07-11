@@ -17,6 +17,12 @@ namespace com.shineglow.di.Runtime
             return this;
         }
 
+        public DiBuilder<T> WithId(string id)
+        {
+            _bindingInfo.Id = id;
+            return this;
+        }
+
         public DiBuilder<T> IsCachingInstance()
         {
             _bindingInfo.IsCachingInstance = true;
