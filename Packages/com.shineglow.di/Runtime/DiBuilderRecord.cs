@@ -8,5 +8,6 @@ namespace com.shineglow.di.Runtime
         public Type ResolvingType { get; internal set; }
         public object Instance { get; internal set; }
         public bool IsCachingInstance { get; internal set; }
+        public string Id { get; internal set; }
     }
 }

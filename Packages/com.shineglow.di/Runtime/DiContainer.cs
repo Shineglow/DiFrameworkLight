@@ -7,58 +7,99 @@ namespace com.shineglow.di.Runtime
 {
     public class DiContainer
     {
-        private readonly Dictionary<Type, DiBindingCache> _typeToCaches = new();
-        private readonly Dictionary<Type, IFactory> _typeToFactories = new();
+        private readonly Dictionary<(Type, string), DiBindingCache> _typeToCaches = new();
 
         private DiBuilder _typeBuilder;
 
         public DiBuilder<T> Bind<T>()
         {
             EndBinding();
-
-            var bindingType = typeof(T);
-            if (_typeToCaches.ContainsKey(bindingType))
-            {
-                throw new
-                    MultipleBindingsException($"The container already contains binding for type {bindingType.Name}");
-            }
-
             DiBuilder<T> result = new DiBuilder<T>();
             _typeBuilder = result;
             return result;
         }
 
-        public T Resolve<T>()
+        public T Resolve<T>(string id = null)
+        {
+            var instance = (T)Resolve(typeof(T), id);
+            return instance;
+        }
+
+        private object Resolve(Type type, string id = null)
         {
             EndBinding();
-            return (T)ResolveFromConstructor(typeof(T));
+            if (!_typeToCaches.TryGetValue((type, id), out var cache))
+            {
+                throw new KeyNotFoundException($"No bindings for type {type.Name}");
+            }
+            
+            object result = ResolveFromConstructor(type, cache);
+            InjectFieldsByAttributes(result, cache);
+            InjectPropertiesByAttributes(result, cache);
+            InjectMethodsByAttributes(result, cache);
+            return result;
+            
+            object ResolveFromConstructor(Type typeLoc, DiBindingCache cacheLoc)
+            {
+                object result = null;
+
+                if (typeLoc == null)
+                {
+                    throw new ArgumentNullException($"{nameof(typeLoc)} parameter is null.");
+                }
+
+                if (cacheLoc.Instance != null)
+                {
+                    result = cacheLoc.Instance;
+                }
+                else
+                {
+                    result = CreateInstanceFromConstructor(cacheLoc);
+
+                    if (cacheLoc.Properties.IsCachingInstance)
+                    {
+                        cacheLoc.Instance = result;
+                    }
+                }
+
+                return result;
+            
+                object CreateInstanceFromConstructor(DiBindingCache cache)
+                {
+                    var constructorInfo = cache.Properties.ConstructorInfo ??= GetTheHighestPriorityConstructor(cache);
+                    if (constructorInfo == null)
+                    {
+                        throw new
+                            TypeCannotBeResolvedException($"Unable to create an object of type {cache.ResolvingType}. There is no empty constructor or it is impossible to get copies of the required types. Try changing the resolved object or registering types in the container.");
+                    }
+
+                    cache.Properties.ConstructorProperties ??= GetMethodBaseParametersList(constructorInfo);
+                    var resolvedParameters = GetResolvedObjectsFromArray(cache.Properties.ConstructorProperties);
+                    var result = constructorInfo.Invoke(resolvedParameters);
+                    return result;
+                }
+            }
         }
 
-        public void RegisterFactory<T>(IFactory<T> factory) where T : IFactoryItem
-        {
-            if (factory == null)
-            {
-                throw new ArgumentNullException($"{nameof(factory)} parameter is null.");
-            }
-
-            if (_typeToFactories.TryGetValue(typeof(T), out var cache))
-            {
-                throw new KeyNotFoundException($"Factory already exist for type {typeof(T)}");
-            }
-        }
-        
         private void EndBinding()
         {
             if (_typeBuilder == null)
             {
                 return;
             }
-
             var record = _typeBuilder.GetRecord();
+            var resolvingKey = (record.BindingType, record.Id);
+            if (_typeToCaches.ContainsKey(resolvingKey))
+            {
+                throw new
+                    MultipleBindingsException($"The container already contains binding for type {record.BindingType.Name}");
+            }
+           
             record.ResolvingType ??= record.BindingType;
             var bindingCache =
                 new DiBindingCache()
                 {
+                    BindingId = record.Id,
                     BindingType = record.BindingType,
                     ResolvingType = record.ResolvingType,
                     Instance = record.Instance,
@@ -68,115 +109,205 @@ namespace com.shineglow.di.Runtime
                             IsCachingInstance = record.IsCachingInstance,
                         }
                 };
-            _typeToCaches.Add(record.BindingType, bindingCache);
+
+            _typeToCaches.Add(resolvingKey, bindingCache);
             _typeBuilder = null;
         }
 
-        private object ResolveFromConstructor(Type type)
+        #region InjectByAttributeMethods
+
+        private void InjectFieldsByAttributes(object instance, DiBindingCache cache)
         {
-            EndBinding();
-            object result = null;
-
-            if (type == null)
+            cache.Properties.FieldsToInject ??= GetFieldsToInject(cache.ResolvingType);
+            
+            foreach (var (fieldInfo, id) in cache.Properties.FieldsToInject)
             {
-                throw new ArgumentNullException($"{nameof(type)} parameter is null.");
+                fieldInfo.SetValue(instance, Resolve(fieldInfo.FieldType, id));
             }
 
-            if (!_typeToCaches.TryGetValue(type, out var cache))
+            List<(FieldInfo, string)> GetFieldsToInject(Type typeLoc)
             {
-                throw new KeyNotFoundException($"No bindings for type {type.Name}");
-            }
-
-            if (cache.Instance != null)
-            {
-                result = cache.Instance;
-            }
-            else
-            {
-                result = CreateInstanceFromConstructor(cache);
-
-                if (cache.Properties.IsCachingInstance)
+                List<(FieldInfo, string)> result = new();
+                foreach (var memberInfo in typeLoc.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    cache.Instance = result;
+                    var attribute = memberInfo.GetCustomAttribute<InjectAttribute>();
+                    if (attribute != null)
+                    {
+                        result.Add((memberInfo, attribute.Id));
+                    }
                 }
-            }
 
-            return result;
+                return result;
+            }
         }
 
-        private object CreateInstanceFromConstructor(DiBindingCache cache)
+        private void InjectPropertiesByAttributes(object instance, DiBindingCache cache)
         {
-            object result;
-            var constructorInfo = GetConstructor(cache);
-            if (constructorInfo == null)
+            cache.Properties.GeneratedFieldsToInject ??= GetGeneratedFieldsToInject(cache.ResolvingType);
+            
+            foreach (var (propertyField, id) in cache.Properties.GeneratedFieldsToInject)
             {
-                throw new
-                    TypeCannotBeResolvedException($"Unable to create an object of type {cache.ResolvingType}. There is no empty constructor or it is impossible to get copies of the required types. Try changing the resolved object or registering types in the container.");
+                propertyField.SetValue(instance, Resolve(propertyField.FieldType, id));
             }
+            
+            List<(FieldInfo, string)> GetGeneratedFieldsToInject(Type typeLoc)
+            {
+                List<(FieldInfo, string)> result = new();
+                foreach (var memberInfo in typeLoc.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    var attribute = memberInfo.GetCustomAttribute<InjectAttribute>();
+                    if (attribute != null)
+                    {
+                        var propertyField = typeLoc.GetField($"<{memberInfo.Name}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+                        if (propertyField == null)
+                        {
+                            throw new GeneratedMembersAccessException($"Can not find BackingField of {memberInfo.Name} property of {typeLoc.Name} type");
+                        }
+                        result.Add((propertyField, attribute.Id));
+                    }
+                }
 
-            var resolvedParameters = GetResolveParameters(constructorInfo);
-            result = constructorInfo.Invoke(resolvedParameters);
-            return result;
+                return result;
+            }
         }
 
-        private object[] GetResolveParameters(ConstructorInfo constructorInfo)
+        private void InjectMethodsByAttributes(object instance, DiBindingCache cache)
         {
-            var constructorParameters = constructorInfo.GetParameters();
-            object[] resolvedParameters = new object[constructorParameters.Length];
-
-            for (var i = 0; i < constructorParameters.Length; i++)
+            cache.Properties.MethodInfosToInject ??= GetMethodInfosToInject(cache.ResolvingType);
+            
+            foreach (var (methodInfo, propertiesWithIds) in cache.Properties.MethodInfosToInject)
             {
-                var parameterInfo = constructorParameters[i];
-                resolvedParameters[i] = ResolveFromConstructor(parameterInfo.ParameterType);
+                object[] resolved = new object[propertiesWithIds.Count];
+                for (var index = 0; index < propertiesWithIds.Count; index++)
+                {
+                    var (parameterType, id) = propertiesWithIds[index];
+                    resolved[index] = Resolve(parameterType, id);
+                }
+                methodInfo.Invoke(instance, resolved);
+            }
+
+            IReadOnlyList<(MethodInfo, IReadOnlyList<(Type, string)>)> GetMethodInfosToInject(Type typeLoc)
+            {
+                List<(MethodInfo, IReadOnlyList<(Type, string)>)> result = new();
+                foreach (var methodInfo in typeLoc.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    var attribute = methodInfo.GetCustomAttribute<InjectAttribute>();
+                    if (attribute != null)
+                    {
+                        result.Add((methodInfo, GetMethodBaseParametersList(methodInfo)));
+                    }
+                }
+
+                return result;
+            }
+        }
+
+        #endregion
+
+        #region MassiveReflectionFunctions
+
+        private IReadOnlyList<(Type resolveType, string id)> GetMethodBaseParametersList(MethodBase constructorInfo)
+        {
+            var parametersArray = constructorInfo.GetParameters();
+            (Type, string)[] parametersList = new (Type, string)[parametersArray.Length];
+
+            for (var i = 0; i < parametersArray.Length; i++)
+            {
+                var parameterInfo = parametersArray[i];
+                parametersList[i] = (parameterInfo.ParameterType,
+                                     parameterInfo.GetCustomAttribute<InjectAttribute>()?.Id);
+            }
+
+            return parametersList;
+        }
+
+        private object[] GetResolvedObjectsFromArray(IReadOnlyList<(Type, string)> parameters)
+        {
+            object[] resolvedParameters = new object[parameters.Count];
+
+            for (var i = 0; i < parameters.Count; i++)
+            {
+                var parameterInfo = parameters[i];
+                resolvedParameters[i] = Resolve(parameterInfo.Item1, parameterInfo.Item2);
             }
 
             return resolvedParameters;
         }
 
-        private ConstructorInfo GetConstructor(DiBindingCache cache)
+        private ConstructorInfo GetTheHighestPriorityConstructor(DiBindingCache cache)
         {
             ConstructorInfo constructorInfo = null;
-            var constructorInfos = cache.ResolvingType.GetConstructors();
-            foreach (var info in constructorInfos)
+            var constructorInfos = cache.ResolvingType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            var infos = constructorInfos.OrderBy(i => i.GetCustomAttribute<InjectAttribute>() != null);
+            
+            foreach (var info in infos)
+            {
+                var attribute = info.GetCustomAttribute<InjectAttribute>();
+                if (attribute == null || cache.BindingId == null || cache.BindingId.Equals(attribute.Id))
+                {
+                    if (IsConstructorInfoValid(info))
+                    {
+                        constructorInfo = info;
+                        break;
+                    }
+                }
+            }
+            
+            return constructorInfo;
+
+            #region ParametersValidationFunctions
+            bool IsConstructorInfoValid(ConstructorInfo info)
             {
                 var parameters = info.GetParameters();
                 if (parameters.Length != 0)
                 {
                     if (parameters.Any(i =>
                                            IsBasicType(i.ParameterType)
-                                        || !CanGetInstanceOfType(i.ParameterType)
-                                        || IsParameterTypeEqualTypeOfResolvingObject(cache.ResolvingType,
-                                               cache.BindingType, i.ParameterType))
+                                           || !CanGetInstanceOfType(i.ParameterType, i.GetCustomAttribute<InjectAttribute>()?.Id)
+                                           || IsTypesHaveNotCyclicDependencies(cache.ResolvingType,
+                                                                               cache.BindingType, i.ParameterType))
                        )
                     {
-                        continue;
+                        return false;
                     }
                 }
 
-                constructorInfo = info;
+                return true;
+
+                bool IsTypesHaveNotCyclicDependencies(Type resolvingType, Type bindingType, Type parameterType)
+                {
+                    return CompareTypes(parameterType, resolvingType) || CompareTypes(parameterType, bindingType);
+
+                    bool CompareTypes(Type a, Type b)
+                    {
+                        if (a != b) return false;
+                        
+                        var parameterResolveId = a.GetCustomAttribute<InjectAttribute>()?.Id;
+                        var resolvingTypeResolveId = b.GetCustomAttribute<InjectAttribute>()?.Id;
+                        return parameterResolveId == null || resolvingTypeResolveId == null
+                                   ? ReferenceEquals(parameterResolveId, resolvingTypeResolveId)
+                                   : parameterResolveId.Equals(resolvingTypeResolveId);
+                    }
+                }
+
+                bool CanGetInstanceOfType(Type type, string id)
+                {
+                    var result = _typeToCaches.ContainsKey((type, id));
+                    return result;
+                }
+
+                bool IsBasicType(Type type)
+                {
+                    return type.IsPrimitive
+                           || type == typeof(string)
+                           || type == typeof(decimal);
+                }
+                
             }
-
-            return constructorInfo;
+            #endregion
         }
 
-        private static bool IsParameterTypeEqualTypeOfResolvingObject(Type resolvingType, Type bindingType,
-                                                                      Type parameterType)
-        {
-            return (parameterType == resolvingType || parameterType == bindingType);
-        }
-
-        public bool CanGetInstanceOfType(Type type)
-        {
-            bool result = false;
-            result = _typeToCaches.ContainsKey(type);
-            return result;
-        }
-
-        public static bool IsBasicType(Type type)
-        {
-            return type.IsPrimitive
-                || type == typeof(string)
-                || type == typeof(decimal);
-        }
+        #endregion
     }
 }
