@@ -66,14 +66,14 @@ namespace com.shineglow.di.Runtime
             
                 object CreateInstanceFromConstructor(DiBindingCache cache)
                 {
-                    var constructorInfo = cache.Properties.ConstructorInfo ??= GetConstructor(cache);
+                    var constructorInfo = cache.Properties.ConstructorInfo ??= GetTheHighestPriorityConstructor(cache);
                     if (constructorInfo == null)
                     {
                         throw new
                             TypeCannotBeResolvedException($"Unable to create an object of type {cache.ResolvingType}. There is no empty constructor or it is impossible to get copies of the required types. Try changing the resolved object or registering types in the container.");
                     }
 
-                    cache.Properties.ConstructorProperties ??= GetParametersArray(constructorInfo);
+                    cache.Properties.ConstructorProperties ??= GetMethodBaseParametersList(constructorInfo);
                     var resolvedParameters = GetResolvedObjectsFromArray(cache.Properties.ConstructorProperties);
                     var result = constructorInfo.Invoke(resolvedParameters);
                     return result;
@@ -158,7 +158,7 @@ namespace com.shineglow.di.Runtime
                     var attribute = memberInfo.GetCustomAttribute<InjectAttribute>();
                     if (attribute != null)
                     {
-                        var propertyField = typeLoc.GetField($"<{memberInfo.Name}>k__BackingField");
+                        var propertyField = typeLoc.GetField($"<{memberInfo.Name}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
                         if (propertyField == null)
                         {
                             throw new GeneratedMembersAccessException($"Can not find BackingField of {memberInfo.Name} property of {typeLoc.Name} type");
@@ -173,31 +173,28 @@ namespace com.shineglow.di.Runtime
 
         private void InjectMethodsByAttributes(object instance, DiBindingCache cache)
         {
-            cache.Properties.MethodInfosToInject ??= GetMethodInfoToInject(cache.ResolvingType);
+            cache.Properties.MethodInfosToInject ??= GetMethodInfosToInject(cache.ResolvingType);
             
             foreach (var (methodInfo, propertiesWithIds) in cache.Properties.MethodInfosToInject)
             {
                 object[] resolved = new object[propertiesWithIds.Count];
                 for (var index = 0; index < propertiesWithIds.Count; index++)
                 {
-                    var (parameterInfo, id) = propertiesWithIds[index];
-                    resolved[index] = Resolve(parameterInfo.ParameterType, id);
+                    var (parameterType, id) = propertiesWithIds[index];
+                    resolved[index] = Resolve(parameterType, id);
                 }
                 methodInfo.Invoke(instance, resolved);
             }
 
-            List<(MethodInfo, List<(ParameterInfo, string)>)> GetMethodInfoToInject(Type typeLoc)
+            IReadOnlyList<(MethodInfo, IReadOnlyList<(Type, string)>)> GetMethodInfosToInject(Type typeLoc)
             {
-                List<(MethodInfo, List<(ParameterInfo, string)>)> result = new();
+                List<(MethodInfo, IReadOnlyList<(Type, string)>)> result = new();
                 foreach (var methodInfo in typeLoc.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
                     var attribute = methodInfo.GetCustomAttribute<InjectAttribute>();
                     if (attribute != null)
                     {
-                        List<(ParameterInfo, string)> parametersInfo = new();
-                        result.Add((methodInfo, parametersInfo));
-                        var parameters = methodInfo.GetParameters();
-                        parametersInfo.AddRange(parameters.Select(parameter => (parameter, parameter.GetCustomAttribute<InjectAttribute>()?.Id)));
+                        result.Add((methodInfo, GetMethodBaseParametersList(methodInfo)));
                     }
                 }
 
@@ -209,14 +206,14 @@ namespace com.shineglow.di.Runtime
 
         #region MassiveReflectionFunctions
 
-        private (Type resolveType, string id)[] GetParametersArray(ConstructorInfo constructorInfo)
+        private IReadOnlyList<(Type resolveType, string id)> GetMethodBaseParametersList(MethodBase constructorInfo)
         {
-            var constructorParameters = constructorInfo.GetParameters();
-            (Type, string)[] parametersList = new (Type, string)[constructorParameters.Length];
+            var parametersArray = constructorInfo.GetParameters();
+            (Type, string)[] parametersList = new (Type, string)[parametersArray.Length];
 
-            for (var i = 0; i < constructorParameters.Length; i++)
+            for (var i = 0; i < parametersArray.Length; i++)
             {
-                var parameterInfo = constructorParameters[i];
+                var parameterInfo = parametersArray[i];
                 parametersList[i] = (parameterInfo.ParameterType,
                                      parameterInfo.GetCustomAttribute<InjectAttribute>()?.Id);
             }
@@ -224,11 +221,11 @@ namespace com.shineglow.di.Runtime
             return parametersList;
         }
 
-        private object[] GetResolvedObjectsFromArray((Type, string)[] parameters)
+        private object[] GetResolvedObjectsFromArray(IReadOnlyList<(Type, string)> parameters)
         {
-            object[] resolvedParameters = new object[parameters.Length];
+            object[] resolvedParameters = new object[parameters.Count];
 
-            for (var i = 0; i < parameters.Length; i++)
+            for (var i = 0; i < parameters.Count; i++)
             {
                 var parameterInfo = parameters[i];
                 resolvedParameters[i] = Resolve(parameterInfo.Item1, parameterInfo.Item2);
@@ -237,10 +234,10 @@ namespace com.shineglow.di.Runtime
             return resolvedParameters;
         }
 
-        private ConstructorInfo GetConstructor(DiBindingCache cache)
+        private ConstructorInfo GetTheHighestPriorityConstructor(DiBindingCache cache)
         {
             ConstructorInfo constructorInfo = null;
-            var constructorInfos = cache.ResolvingType.GetConstructors();
+            var constructorInfos = cache.ResolvingType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
             var infos = constructorInfos.OrderBy(i => i.GetCustomAttribute<InjectAttribute>() != null);
             

@@ -1,3 +1,9 @@
+## [0.3.0] - 2025-06-06
+### Update
+- Add InjectAttribute.
+- Add resolve cache. All field, properties, constructors, methods, parameters are cached to faster resolving.
+- Add more tests.
+
 ## [0.2.1] - 2025-06-06
 ### Update
 - Assembly definitions have been renamed.

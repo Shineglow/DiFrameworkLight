@@ -16,10 +16,10 @@ namespace com.shineglow.di.Runtime
         {
             public bool IsCachingInstance { get; internal set; }
             public ConstructorInfo ConstructorInfo { get; set; }
-            public (Type resolveType, string id)[] ConstructorProperties { get; set; }
-            public List<(FieldInfo, string)> FieldsToInject { get; set; }
-            public List<(FieldInfo, string)> GeneratedFieldsToInject { get; set; }
-            public List<(MethodInfo, List<(ParameterInfo, string)>)> MethodInfosToInject { get; set; }
+            public IReadOnlyList<(Type resolveType, string id)> ConstructorProperties { get; set; }
+            public IReadOnlyList<(FieldInfo, string)> FieldsToInject { get; set; }
+            public IReadOnlyList<(FieldInfo, string)> GeneratedFieldsToInject { get; set; }
+            public IReadOnlyList<(MethodInfo, IReadOnlyList<(Type, string)>)> MethodInfosToInject { get; set; }
         }
     }
     
