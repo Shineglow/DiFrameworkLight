@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 
 namespace com.shineglow.di.Runtime
 {
     public class DiContainer
     {
         private readonly Dictionary<(Type, string), DiBindingCache> _typeToCaches = new();
+        private readonly Dictionary<(Type, string), DiBindingCache> _instanceInjectCache = new();
 
         private DiBuilder _typeBuilder;
 
@@ -23,6 +25,47 @@ namespace com.shineglow.di.Runtime
         {
             var instance = (T)Resolve(typeof(T), id);
             return instance;
+        }
+
+        public T Resolve<T>(Type type, string id)
+        {
+            var instance = (T)Resolve(type, id);
+            return instance;
+        }
+
+        public void InjectIntoGameObject(GameObject gameObject, string id = null)
+        {
+            foreach (var component in gameObject.GetComponents<MonoBehaviour>())
+            {
+                InjectIntoInstance(component, id);
+            }
+        }
+
+        public void InjectIntoInstance(object instance, string id = null)
+        {
+            EndBinding();
+            Type type = instance.GetType();
+            if (_instanceInjectCache.TryGetValue((type, id), out var cache))
+            {
+                if(!cache.Properties.HasNonConstructResolves)
+                    return;
+            }
+            else
+            {
+                cache = new DiBindingCache()
+                {
+                    BindingId = id,
+                    BindingType = type,
+                    ResolvingType = type,
+                    Instance = null,
+                    Properties = new DiBindingCache.CacheProperties()
+                };
+                _instanceInjectCache.Add((type, id), cache);
+            }
+            
+            InjectFieldsByAttributes(instance, cache);
+            InjectPropertiesByAttributes(instance, cache);
+            InjectMethodsByAttributes(instance, cache);
         }
 
         private object Resolve(Type type, string id = null)

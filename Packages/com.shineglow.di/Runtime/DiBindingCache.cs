@@ -20,6 +20,9 @@ namespace com.shineglow.di.Runtime
             public IReadOnlyList<(FieldInfo, string)> FieldsToInject { get; set; }
             public IReadOnlyList<(FieldInfo, string)> GeneratedFieldsToInject { get; set; }
             public IReadOnlyList<(MethodInfo, IReadOnlyList<(Type, string)>)> MethodInfosToInject { get; set; }
+            public bool HasNonConstructResolves => (FieldsToInject == null || FieldsToInject.Count > 0) && 
+                                                   (GeneratedFieldsToInject == null || GeneratedFieldsToInject.Count > 0) &&
+                                                   (MethodInfosToInject == null || MethodInfosToInject.Count > 0);
         }
     }
     

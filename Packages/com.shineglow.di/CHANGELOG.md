@@ -1,3 +1,9 @@
+## [0.4.0] - 2025-08-13
+### Update
+- Add injection into instances
+- Add injection into GameObject components
+- Add tests for new features
+
 ## [0.3.0] - 2025-06-06
 ### Update
 - Add InjectAttribute.
