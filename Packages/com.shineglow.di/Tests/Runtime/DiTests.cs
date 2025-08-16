@@ -26,12 +26,12 @@ namespace com.shineglow.di.Tests.Runtime
         }
     
         [Test]
-        public void DiContainer_SimpleResolve_NotResolveFromPrivateConstructor()
+        public void DiContainer_SimpleResolve_ResolveFromPrivateConstructor()
         {
             DiContainer container = new DiContainer();
             container.Bind<IFoo1>().To<Foo1_2>();
         
-            Assert.Catch<TypeCannotBeResolvedException>(() => container.Resolve<IFoo1>());
+            Assert.NotNull(container.Resolve<IFoo1>());
         }
     
         [Test]
