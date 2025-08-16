@@ -1,3 +1,8 @@
+## [0.5.1] - 2025-08-16
+### Fix
+- Add previous binding finalization in InjectIntoGameObject method.
+- Remove old files
+
 ## [0.5.0] - 2025-08-16
 ### Update
 - Add parent diContainer reference

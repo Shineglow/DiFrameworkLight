@@ -42,6 +42,7 @@ namespace com.shineglow.di.Runtime
 
         public void InjectIntoGameObject(GameObject gameObject, string id = null)
         {
+            EndBinding();
             foreach (var component in gameObject.GetComponents<MonoBehaviour>())
             {
                 InjectIntoInstance(component, id);
