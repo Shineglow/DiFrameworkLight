@@ -1,3 +1,9 @@
+## [0.5.0] - 2025-08-16
+### Update
+- Add parent diContainer reference
+- Add resolve logic for parent container
+- Deleted unnecessary files 
+
 ## [0.4.0] - 2025-08-13
 ### Update
 - Add injection into instances
