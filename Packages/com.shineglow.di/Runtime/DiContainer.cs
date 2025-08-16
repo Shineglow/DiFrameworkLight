@@ -8,10 +8,17 @@ namespace com.shineglow.di.Runtime
 {
     public class DiContainer
     {
+        private readonly DiContainer _parentContainer;
+        
         private readonly Dictionary<(Type, string), DiBindingCache> _typeToCaches = new();
         private readonly Dictionary<(Type, string), DiBindingCache> _instanceInjectCache = new();
 
         private DiBuilder _typeBuilder;
+
+        public DiContainer(DiContainer parent = null)
+        {
+            _parentContainer = parent;
+        }
 
         public DiBuilder<T> Bind<T>()
         {
@@ -71,20 +78,26 @@ namespace com.shineglow.di.Runtime
         private object Resolve(Type type, string id = null)
         {
             EndBinding();
+
+            object result;
             if (!_typeToCaches.TryGetValue((type, id), out var cache))
             {
-                throw new KeyNotFoundException($"No bindings for type {type.Name}");
+                if(_parentContainer == null)
+                    throw new KeyNotFoundException($"No bindings for type {type.Name}");
+                result = _parentContainer.Resolve(type, id);
             }
-            
-            object result = ResolveFromConstructor(type, cache);
-            InjectFieldsByAttributes(result, cache);
-            InjectPropertiesByAttributes(result, cache);
-            InjectMethodsByAttributes(result, cache);
+            else
+            {
+                result = ResolveFromConstructor(type, cache);
+                InjectFieldsByAttributes(result, cache);
+                InjectPropertiesByAttributes(result, cache);
+                InjectMethodsByAttributes(result, cache);
+            }
             return result;
             
             object ResolveFromConstructor(Type typeLoc, DiBindingCache cacheLoc)
             {
-                object result = null;
+                object resultLoc;
 
                 if (typeLoc == null)
                 {
@@ -93,33 +106,32 @@ namespace com.shineglow.di.Runtime
 
                 if (cacheLoc.Instance != null)
                 {
-                    result = cacheLoc.Instance;
+                    resultLoc = cacheLoc.Instance;
                 }
                 else
                 {
-                    result = CreateInstanceFromConstructor(cacheLoc);
+                    resultLoc = CreateInstanceFromConstructor(cacheLoc);
 
                     if (cacheLoc.Properties.IsCachingInstance)
                     {
-                        cacheLoc.Instance = result;
+                        cacheLoc.Instance = resultLoc;
                     }
                 }
 
-                return result;
+                return resultLoc;
             
-                object CreateInstanceFromConstructor(DiBindingCache cache)
+                object CreateInstanceFromConstructor(DiBindingCache typeCache)
                 {
-                    var constructorInfo = cache.Properties.ConstructorInfo ??= GetTheHighestPriorityConstructor(cache);
+                    var constructorInfo = typeCache.Properties.ConstructorInfo ??= GetTheHighestPriorityConstructor(typeCache);
                     if (constructorInfo == null)
                     {
                         throw new
-                            TypeCannotBeResolvedException($"Unable to create an object of type {cache.ResolvingType}. There is no empty constructor or it is impossible to get copies of the required types. Try changing the resolved object or registering types in the container.");
+                            TypeCannotBeResolvedException($"Unable to create an object of type {typeCache.ResolvingType}. There is no empty constructor or it is impossible to get copies of the required types. Try changing the resolved object or registering types in the container.");
                     }
 
-                    cache.Properties.ConstructorProperties ??= GetMethodBaseParametersList(constructorInfo);
-                    var resolvedParameters = GetResolvedObjectsFromArray(cache.Properties.ConstructorProperties);
-                    var result = constructorInfo.Invoke(resolvedParameters);
-                    return result;
+                    typeCache.Properties.ConstructorProperties ??= GetMethodBaseParametersList(constructorInfo);
+                    var resolvedParameters = GetResolvedObjectsFromArray(typeCache.Properties.ConstructorProperties);
+                    return constructorInfo.Invoke(resolvedParameters);
                 }
             }
         }
